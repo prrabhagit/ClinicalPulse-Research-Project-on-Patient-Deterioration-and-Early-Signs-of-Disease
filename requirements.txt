@@ -1,0 +1,15 @@
+# core (report scanning)
+pypdf>=4.0
+pillow
+pytesseract        # also needs the tesseract binary: apt install tesseract-ocr / brew install tesseract
+
+# imaging (X-ray model)
+torch
+torchvision
+scikit-learn
+numpy
+matplotlib
+
+# dev
+pytest
+reportlab
