@@ -27,5 +27,6 @@ class _NumpyOnlyUnpickler(pickle.Unpickler):
         if (module, name) in _ALLOWED:
             return super().find_class(module, name)
         raise pickle.UnpicklingError(f"Refusing to load {module}.{name} from a label file")
+    
 
 
