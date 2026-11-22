@@ -63,4 +63,26 @@ def check_no_patient_leakage(df: pd.DataFrame) -> None:
                 raise DatasetError(f"Patient leakage between '{a}' and '{b}' splits "
                                    f"({len(sets[a] & sets[b])} shared patients).")
 
+def subset_by_patient(df: pd.DataFrame, max_images: int, seed: int = 42) -> pd.DataFrame:
+    """Keep whole patients so that roughly max_images images remain, preserving split proportions."""
+    if max_images >= len(df):
+        return df
+    rng = np.random.RandomState(seed)
+    keep: List[int] = []
+    for s in SPLITS:
+        part = df[df["split"] == s]
+        if part.empty:
+            continue
+        target = max(1, round(max_images * len(part) / len(df)))
+        counts = part.groupby("subject_id").size()
+        order = rng.permutation(counts.index.values)
+        total = 0
+        for sid in order:
+            if total >= target:
+                break
+            keep.append(sid)
+            total += counts[sid]
+    return df[df["subject_id"].isin(keep)]
+
+
 
