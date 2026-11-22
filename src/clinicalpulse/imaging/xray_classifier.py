@@ -78,7 +78,11 @@ def eval_tfms():
 
 
 def build_model(arch, num_classes, pretrained=True):
-    if arch == "resnet50":
+    if arch == "resnet18":
+        w = models.ResNet18_Weights.DEFAULT if pretrained else None
+        m = models.resnet18(weights=w)
+        m.fc = nn.Sequential(nn.Dropout(0.3), nn.Linear(m.fc.in_features, num_classes))
+    elif arch == "resnet50":
         w = models.ResNet50_Weights.DEFAULT if pretrained else None
         m = models.resnet50(weights=w)
         m.fc = nn.Sequential(nn.Dropout(0.3), nn.Linear(m.fc.in_features, num_classes))
@@ -95,8 +99,21 @@ def build_model(arch, num_classes, pretrained=True):
     return m
 
 
+def load_backbone_weights(model, path):
+    """Load an ImageNet state_dict (torchvision/timm ResNet naming) into everything except the new head.
+
+    Uses torch.load(weights_only=True). Raises if anything other than the classifier head differs.
+    """
+    state = torch.load(path, map_location="cpu", weights_only=True)
+    state = {k: v for k, v in state.items() if not k.startswith("fc.")}
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    bad = [k for k in missing if not k.startswith("fc.")] + list(unexpected)
+    if bad:
+        raise ValueError(f"Backbone weights do not match the model; offending keys: {bad[:5]}")
+
+
 def set_backbone_trainable(model, arch, trainable):
-    head = {"resnet50": "fc", "densenet121": "classifier", "efficientnet_b0": "classifier"}[arch]
+    head = {"resnet18": "fc", "resnet50": "fc", "densenet121": "classifier", "efficientnet_b0": "classifier"}[arch]
     for name, p in model.named_parameters():
         p.requires_grad = True if name.startswith(head) else trainable
 
@@ -262,7 +279,7 @@ def evaluate(args):
 # Inference + Grad-CAM
 # --------------------------------------------------------------------------- #
 def target_layer(model, arch):
-    if arch == "resnet50":
+    if arch.startswith("resnet"):
         return model.layer4[-1]
     if arch == "densenet121":
         return model.features
@@ -331,7 +348,7 @@ def main():
 
     t = sub.add_parser("train")
     t.add_argument("--data", required=True)
-    t.add_argument("--arch", default="densenet121", choices=["resnet50", "densenet121", "efficientnet_b0"])
+    t.add_argument("--arch", default="densenet121", choices=["resnet18", "resnet50", "densenet121", "efficientnet_b0"])
     t.add_argument("--epochs", type=int, default=15)
     t.add_argument("--warmup", type=int, default=2, help="epochs training only the new head")
     t.add_argument("--batch-size", type=int, default=32)

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ClinicalPulse</title>
+<style>
+:root{--bg:#f6f8fa;--card:#fff;--fg:#1b2430;--mut:#5b6776;--line:#dde3ea;--acc:#0b6bcb;--ok:#1a7f4b;--warn:#b7791f;--bad:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#10151c;--card:#18202a;--fg:#e6ebf1;--mut:#97a3b2;--line:#2a3441;--acc:#5aa9ff;--ok:#4cc38a;--warn:#e0a94a;--bad:#ff7b6b}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--card)}
+h1{margin:0;font-size:20px}h1 span{color:var(--acc)}.sub{color:var(--mut);font-size:13px}
+main{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h2{margin:0 0 4px;font-size:16px}.wide{grid-column:1/-1}
+button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer;font:inherit}
+button:disabled{opacity:.5;cursor:default}input[type=file]{max-width:100%}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.chip{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
+.present{color:var(--bad);border-color:var(--bad)}.negated{color:var(--ok);border-color:var(--ok)}
+.uncertain,.conflicting{color:var(--warn);border-color:var(--warn)}.historical{color:var(--mut)}
+.low{color:var(--ok);border-color:var(--ok)}.low-medium,.medium{color:var(--warn);border-color:var(--warn)}.high{color:var(--bad);border-color:var(--bad)}
+.err{color:var(--bad)}.msg{color:var(--mut);font-size:13px}.warn{color:var(--warn);font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:3px 6px;border-bottom:1px solid var(--line);text-align:left}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:90px}.bar i{display:block;height:100%;background:var(--acc)}
+img.prev{max-width:100%;max-height:260px;border-radius:6px;display:block;margin:6px 0}
+ul{margin:4px 0;padding-left:18px}.big{font-size:26px;font-weight:600}
+</style></head><body>
+<header><h1><span>Clinical</span>Pulse</h1>
+<div class="sub">Research decision-support prototype. Not a medical device; not for diagnosis or treatment decisions.</div></header>
+<main>
+<section class="card wide"><h2>Evidence summary</h2>
+<div class="msg">Aggregates what each module found. This is evidence listing and agreement checks only; there is no validated risk model, so no risk score is shown.</div>
+<div id="summary" class="row"><span class="msg">Run an analysis below.</span></div></section>
+
+<section class="card"><h2>Chest X-ray</h2><div class="msg">PNG/JPG. Per-finding model probabilities.</div>
+<div class="row"><input id="xf" type="file" accept=".png,.jpg,.jpeg"><button id="xb">Analyze</button></div>
+<div id="xo"></div></section>
+
+<section class="card"><h2>Medical report</h2><div class="msg">.txt, .pdf (text or scanned), or image.</div>
+<div class="row"><input id="rf" type="file" accept=".txt,.pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp"><button id="rb">Scan</button></div>
+<div id="ro"></div></section>
+
+<section class="card"><h2>Vital signs</h2><div class="msg">CSV: timestamp, heart_rate, respiratory_rate, spo2, systolic_bp, temperature_c, on_oxygen, consciousness.</div>
+<div class="row"><input id="vf" type="file" accept=".csv"><label class="msg">window h <input id="vw" type="number" value="6" min="1" max="72" style="width:56px"></label><button id="vb">Score</button></div>
+<div id="vo"></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id), S={};
+function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function chip(txt,cls){return el('span','chip '+cls,txt)}
+async function post(url,file,btn,out){
+  if(!file){out.replaceChildren(el('div','err','Choose a file first.'));return null}
+  btn.disabled=true;out.replaceChildren(el('div','msg','Working…'));
+  try{const fd=new FormData();fd.append('file',file);
+    const r=await fetch(url,{method:'POST',body:fd});const j=await r.json().catch(()=>({}));
+    if(!r.ok){out.replaceChildren(el('div','err',j.detail||('Error '+r.status)));return null}
+    out.replaceChildren();return j}
+  catch(e){out.replaceChildren(el('div','err','Request failed: '+e.message));return null}
+  finally{btn.disabled=false}}
+function list(items,cls){if(!items||!items.length)return null;const u=el('ul',cls);items.forEach(i=>u.append(el('li',null,i)));return u}
+async function summary(){const s=$('summary');s.replaceChildren();
+  if(!S.vitals&&!S.report&&!S.xray){s.append(el('span','msg','Run an analysis below.'));return}
+  try{const r=await fetch('/api/case',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vitals:S.vitals||null,report:S.report||null,xray:S.xray||null})}),c=await r.json();
+    if(!r.ok){s.append(el('span','err',c.detail||'Error '+r.status));return}
+    if(c.triage){const d=el('div');d.append(el('div','msg','Latest NEWS2 (established triage score)'),el('span','big',c.triage.news2+' '),chip(c.triage.band+(c.triage.complete?'':' (incomplete)'),c.triage.band));s.append(d)}
+    const e=el('div');e.append(el('div','msg','Evidence by source'));
+    c.evidence.length?c.evidence.forEach(x=>e.append(chip(x.source+': '+x.statement,'uncertain'),' ')):e.append(el('span','msg','none'));s.append(e);
+    if(c.concordance.length){const d=el('div');d.append(el('div','msg','Report vs image model'));c.concordance.forEach(x=>d.append(chip(x.finding+': '+x.verdict,x.verdict==='concordant'?'negated':'conflicting'),' '));s.append(d)}
+    const f=list(c.flags,'warn');if(f){const d=el('div');d.append(el('div','msg','Flags'),f);s.append(d)}
+    const l=list(c.limitations,'msg');if(l){const d=el('div');d.append(el('div','msg','Limitations'),l);s.append(d)}}
+  catch(err){s.append(el('span','err','Request failed: '+err.message))}}
+
+$('xb').onclick=async()=>{const f=$('xf').files[0],o=$('xo'),j=await post('/api/xray',f,$('xb'),o);if(!j)return;
+  const img=el('img','prev');img.src=URL.createObjectURL(f);o.append(img);
+  const t=el('table');t.append(Object.assign(el('tr'),{innerHTML:'<th>Finding</th><th>Probability</th><th></th>'}));
+  j.predictions.forEach(p=>{const r=el('tr'),b=el('div','bar'),i=el('i');i.style.width=(p.probability*100)+'%';b.append(i);
+    const c=el('td');c.append(b);r.append(el('td',null,p.label),el('td',null,(p.probability*100).toFixed(1)+'%'),c);
+    if(p.above_threshold)r.children[0].append(' ',chip('above val. threshold','uncertain'));t.append(r)});
+  o.append(t,el('div','msg',j.note));S.xray=j.predictions;summary()};
+
+$('rb').onclick=async()=>{const o=$('ro'),j=await post('/api/report',$('rf').files[0],$('rb'),o);if(!j)return;
+  const t=el('table');t.append(Object.assign(el('tr'),{innerHTML:'<th>Entity</th><th>Status</th><th>Cue</th>'}));
+  Object.entries(j.findings).forEach(([k,v])=>{const cues=[...new Set(j.mentions.filter(m=>m.entity===k&&m.trigger).map(m=>m.trigger))].join(', ');
+    const r=el('tr'),c=el('td');c.append(chip(v,v));r.append(el('td',null,k.replace('_',' ')),c,el('td','msg',cues));t.append(r)});
+  o.append(el('div','msg','Read via '+j.method+'; sections: '+(j.sections_found.join(', ')||'none')),t);
+  if(j.vitals.length){o.append(el('div',null,'Vitals in text: '+j.vitals.map(v=>v.name+' '+v.value).join(', ')));
+    const n=j.news2_from_report;if(n)o.append(el('div','msg','NEWS2 from these vitals: '+n.total+' ('+n.band+')'+(n.complete?'':' — incomplete, lower bound')))}
+  [['Contradictions',j.contradictions],['Warnings',j.warnings]].forEach(([h,a])=>{const u=list(a,'warn');if(u){o.append(el('div','msg',h),u)}});
+  if(!Object.keys(j.findings).length)o.append(el('div','msg','No supported entities recognized.'));
+  S.report=j;summary()};
+
+$('vb').onclick=async()=>{const o=$('vo');o.replaceChildren();
+  const f=$('vf').files[0];if(!f){o.append(el('div','err','Choose a file first.'));return}
+  const fd=new FormData();fd.append('file',f);$('vb').disabled=true;o.append(el('div','msg','Working…'));
+  try{const r=await fetch('/api/vitals?window_hours='+encodeURIComponent($('vw').value),{method:'POST',body:fd}),j=await r.json().catch(()=>({}));
+    o.replaceChildren();if(!r.ok){o.append(el('div','err',j.detail||('Error '+r.status)));return}
+    const L=j.latest,h=el('div','row');h.append(el('span','big',L.total),chip(L.band+(L.complete?'':' (incomplete)'),L.band),el('span','msg',j.n_observations+' obs, '+j.first_time.slice(0,16)+' → '+j.last_time.slice(0,16)));o.append(h);
+    const v=j.news2_series.map(x=>x.news2),mx=Math.max(7,...v),W=300,H=70,pts=v.map((y,i)=>(v.length<2?W/2:i*W/(v.length-1)).toFixed(1)+','+(H-4-y/mx*(H-8)).toFixed(1)).join(' ');
+    const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','0 0 '+W+' '+H);svg.setAttribute('width','100%');
+    const pl=document.createElementNS(ns,'polyline');pl.setAttribute('points',pts);pl.setAttribute('fill','none');pl.setAttribute('stroke','var(--acc)');pl.setAttribute('stroke-width','2');svg.append(pl);
+    o.append(el('div','msg','NEWS2 over time'+(j.news2_change_in_window!=null?' (change in window: '+(j.news2_change_in_window>0?'+':'')+j.news2_change_in_window+')':'')),svg);
+    const t=el('table');t.append(Object.assign(el('tr'),{innerHTML:'<th>Vital</th><th>n</th><th>Fitted change</th><th></th>'}));
+    j.trends.forEach(x=>{const r=el('tr');r.append(el('td',null,x.name),el('td',null,x.n),el('td','msg',x.fitted_change!=null?x.fitted_change.toFixed(1)+' ('+x.slope_per_hour.toFixed(2)+'/h)':x.note),el('td','warn',x.flag||''));t.append(r)});o.append(t);
+    [['Notes',L.notes],['Warnings',j.warnings]].forEach(([h2,a])=>{const u=list(a,'warn');if(u){o.append(el('div','msg',h2),u)}});
+    S.vitals=j;summary()}
+  catch(e){o.replaceChildren(el('div','err','Request failed: '+e.message))}finally{$('vb').disabled=false}};
+</script></body></html>

@@ -7,9 +7,16 @@ pytesseract        # also needs the tesseract binary: apt install tesseract-ocr 
 torch
 torchvision
 scikit-learn
+pandas
 numpy
 matplotlib
 
 # dev
 pytest
 reportlab
+
+# dashboard
+fastapi
+uvicorn
+python-multipart
+httpx

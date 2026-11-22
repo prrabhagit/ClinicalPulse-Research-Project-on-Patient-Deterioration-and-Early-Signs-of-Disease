@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = ["pypdf>=4.0"]
 
 [project.optional-dependencies]
-imaging = ["torch", "torchvision", "scikit-learn", "numpy", "pillow", "matplotlib"]
+imaging = ["torch", "torchvision", "scikit-learn", "pandas", "numpy", "pillow", "matplotlib"]
 ocr = ["pytesseract", "pillow"]
 dev = ["pytest", "reportlab"]
 

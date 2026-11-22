@@ -3,6 +3,7 @@ import argparse
 import json
 import sys
 
+from ..vitals import from_report_vitals, score_news2
 from . import ReportReadError, scan_report
 
 
@@ -31,6 +32,10 @@ def main() -> int:
         print("\nVitals:")
         for v in res.vitals:
             print(f"  {v.name:<18} {v.value:g} {v.unit}")
+        obs, vwarn = from_report_vitals(res.vitals)
+        n2 = score_news2(obs)
+        print(f"  NEWS2 from report vitals: {n2.total} ({n2.band})" + ("" if n2.complete else " [INCOMPLETE - lower bound]"))
+        res.warnings.extend(vwarn + n2.notes)
     for title, items in (("Contradictions", res.contradictions), ("Warnings", res.warnings)):
         if items:
             print(f"\n{title}:")
